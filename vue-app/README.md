@@ -15,20 +15,42 @@ yarn run serve
 yarn run build
 ```
 
-### Run your tests
+# vue-app
+
+## Project setup
 ```
-yarn run test
+yarn install
 ```
 
-### Lints and fixes files
+### Compiles and hot-reloads for development
 ```
-yarn run lint
+yarn run serve
 ```
+### Follow this guide
 
-### Run your unit tests
-```
-yarn run test:unit
-```
+### Landing page
+![alt text](../images/Screenshot from 2020-07-27 22-58-01.png)
 
-### Customize configuration
-See [Configuration Reference](https://cli.vuejs.org/config/).
+
+### Sign up
+![alt text](../images/Screenshot from 2020-07-27 22-58-37.png)
+
+### Sign in
+![alt text](../images/Screenshot from 2020-07-27 22-58-48.png)
+
+### Enable Wallet
+![alt text](../images/Screenshot from 2020-07-27 22-58-56.png)
+
+### Enable Wallet
+![alt text](../images/Screenshot from 2020-07-27 22-58-56.png)
+
+
+### Enable Wallet
+![alt text](../images/Screenshot from 2020-07-27 23-00-03.png)
+
+### Enable Wallet
+![alt text](../images/Screenshot from 2020-07-27 23-00-23.png)
+
+
+### Confirm and set up gas
+![alt text](../images/Screenshot from 2020-07-27 23-00-33.png).

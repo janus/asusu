@@ -97,3 +97,6 @@ Using network 'live'.
 Truffle v5.0.25 (core: 5.0.25)
 Node v10.16.3
 ```
+
+
+contract address: "0xe66f27cf79a74d90744ddf93caec61ad810cc6a3";

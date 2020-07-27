@@ -1,6 +1,10 @@
-pragma solidity ^0.6.7;
+pragma solidity ^0.5.0;
+pragma experimental ABIEncoderV2;
 
-import "@chainlink/contracts/src/v0.6/interfaces/AggregatorInterface.sol";
+import "@chainlink/contracts/src/v0.5/dev/AggregatorInterface.sol";
+import "@chainlink/contracts/src/v0.5/ChainlinkClient.sol";
+//import "@chainlink/contracts/src/v0.5/interfaces/AggregatorInterface.sol";
+//import "https://raw.githubusercontent.com/smartcontractkit/chainlink/develop/evm-contracts/src/v0.6/interfaces/AggregatorInterface.sol";
 
 
 /**
@@ -49,86 +53,48 @@ interface ERC20 {
     event Approval(address indexed owner, address indexed spender, uint256 value);
 }
 
-/**
- * @title Ownable
- * @dev The Ownable contract has an owner address, and provides basic authorization control
- * functions, this simplifies the implementation of "user permissions".
- */
-contract Ownable {
+contract MyContract is ChainlinkClient {
+
+    using SafeMath for uint256;
     address public owner;
 
-    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
-
-    /**
-     * @dev The Ownable constructor sets the original `owner` of the contract to the sender
-     * account.
-     */
-    constructor() public {
-        owner = msg.sender;
-    }
-
-    /**
-     * @dev Throws if called by any account other than the owner.
-     */
-    modifier onlyOwner() {
-        require(msg.sender == owner, "You are not the owner of this contract");
-        _;
-    }
-
-    /**
-     * @dev Allows the current owner to transfer control of the contract to a newOwner.
-     * @param newOwner The address to transfer ownership to.
-     */
-    function transferOwnership(address newOwner) public onlyOwner {
-        require(newOwner != address(0), "Can't transfer to empty address");
-        emit OwnershipTransferred(owner, newOwner);
-        owner = newOwner;
-    }
-}
-
-contract PriceConsumer is Ownable,VRFConsumerBase {
-
-    bytes32 internal keyHash;
-    uint256 internal fee;
-    
-    uint256 public randomResult;
-
     AggregatorInterface internal priceFeed;
+    AggregatorInterface internal ipriceFeed;
     
-    address ethUSD = 0x8468b2bDCE073A157E560AA4D9CcF6dB1DB98507;
     address linkUSD = 0xc21c178fE75aAd2017DA25071c54462e26d8face;
     address daiUSD = 0xec3cf275cAa57dD8aA5c52e9d5b70809Cb01D421;
 
 
-    address[] tokens = [ethUSD, linkUSD, daiUSD];
+    address[] tokens = [linkUSD, daiUSD];
 
-    address dai = 0xad6d458402f60fd3bd25163575031acdce07538d;
+    address dai = 0x00D811B7d33cECCFcb7435F14cCC274a31CE7F5d;
     address link = 0x20fE562d797A42Dcb3399062AE9546cd06f63280;
 
     address[] erc20tokens = [link, dai];
 
 
-    uint256 price;
-    uint256 time;
-    uint256 USDREFMultiply = 100000000;
+
+    int256 USDREFMultiply = 100000000;
     uint256 twoHUSD = 200;
 
-    struct userDetail{
+    struct userTx{
         uint256 time;
         uint256 rateTimestamp;
         uint256 amount;
         address user;
     }
 
-    userDetail[20] userDetails;
-    mapping(address => userDetails) public tokenAsusu;
+    struct transactions{
+        userTx[20] tx;
+    }
+    mapping(address => transactions) internal tokenAsusu;
 
-    uint ethUSDIndex = 0;
+    transactions tranx;
     uint linkUSDIndex = 0;
     uint daiUSDIndex = 0;
 
     enum Position {Active, Open, Ended}
-    struct State{
+    struct State {
         Position position;
         uint256 total;
         uint256 amountGivingPerMonth;
@@ -136,7 +102,6 @@ contract PriceConsumer is Ownable,VRFConsumerBase {
         uint tindex;
     }
 
-    address owner;
     uint lenMax = 200;
 
     mapping(address => State) public asusuState;
@@ -145,131 +110,114 @@ contract PriceConsumer is Ownable,VRFConsumerBase {
         address indexed _recipient,
         uint256 _amount
     );
+    event SentTokens(
+        address indexed _token,
+        address indexed _sender,
+        uint256 _amount
+    );
     /**
      * Network: Ropsten
      * Aggregator: ETH/USD
      * Address: 0x8468b2bDCE073A157E560AA4D9CcF6dB1DB98507
      */
     constructor() public {
-        asusuState[ethUSD] = State(Open, 0, 0, 0);
-        asusuState[linkUSD] = State(Open, 0, 0, 0);
-        asusuState[daiUSD] = State(Open, 0, 0, 0);
+        asusuState[linkUSD] = State(Position.Open, 0, 0, 0, 0);
+        asusuState[daiUSD] = State(Position.Open, 0, 0, 0, 0);
+        //asusuState[daii] = State(Position.Open, 0, 0, 0, 0);
+        priceFeed = AggregatorInterface(linkUSD);
+        ipriceFeed = AggregatorInterface(daiUSD);
+        //ipriceFeed = AggregatorInterface(daii);
+
         owner = msg.sender;
+
+    }
+
+
+    modifier onlyOwner() {
+        require(msg.sender == owner);
+        _;
     }
   
-    /**
-     * Returns the latest price
-     */
-    function getLatestPrice() internal view returns (int256) {
-        return priceFeed.latestAnswer();
-    }
-
-    /**
-     * Returns the timestamp of the latest price update
-     */
-    function getLatestPriceTimestamp() internal view returns (uint256) {
-        return priceFeed.latestTimestamp();
-    }
-
-    /**
-     * Get rate and time stamp
-     */
-    function getLatestPriceaAndTimestamp(AggregatorInterface priceFeed) internal returns(uint256, uint256){
-        return (priceFeed.latestAnswer(), priceFeed.latestTimestamp());
-    }
-    
 
     /**
      * Deposit token for asusu
      */
     function depositToken(address token) public payable returns (bool){
         uint index = 0;
+        int256 rate;
+        uint256 _value;
+        uint indx;
+        uint256  total;
+        uint i;
+        uint256 time;
+        int256 price;
         while(index < 2) {
             if (token == erc20tokens[i]) {
-                if(asusuState[tokens[i + 1]].position == Active) {
+                if(asusuState[tokens[i + 1]].position == Position.Active) {
                     return false;
                 }
-                priceFeed = AggregatorInterface(tokens[i + 1]);
-                (price, time) = getLatestPriceaAndTimestamp(priceFeed);
+           
+                time = ipriceFeed.latestTimestamp();
+                price = ipriceFeed.latestAnswer();
 
-                uint256 rate = price.div(USDREFMultiply);
-                uint256 _value = twoHUSD.div(rate);
+ 
+
+                rate = price / USDREFMultiply;
+                _value = twoHUSD / uint256(rate);
 
                 ERC20 tken = ERC20(token);
                 tken.approve(msg.sender, _value);
-                require(_value <= tken.balanceOf(msg.sender), "You have insufficient amount for this transaction");
+                require(_value <= msg.sender.balance, "You have insufficient amount for this transaction");
+                require(tken.transferFrom(msg.sender, address(this), _value) == true, "Could not send tokens to the contract");
 
-                token.transferFrom(msg.sender,  address(this), _value);
-                uint indx = asusuState[tokens[i + 1]].gindex;
-                tokenAsusu[tokens[i + 1]][indx] = userDetail(now, time, _value, msg.sender);
+                indx = asusuState[tokens[i + 1]].gindex;
+                tranx = tokenAsusu[tokens[i + 1]];
+                tranx.tx[indx] = userTx(now, time, _value, msg.sender);
                 asusuState[tokens[i + 1]].gindex = asusuState[tokens[i + 1]].gindex + 1;
                 if(asusuState[tokens[i + 1]].gindex == lenMax) {
-
-                    uint256  total = 0;
-                    uint i = 0;
-                    while(i < lenMax) {
-                        total = total + tokenAsusu[tokens[i + 1]][i].amount;
+                    total = 0;
+                    uint l = 0;
+                    while(l < lenMax) {
+                        total = total + tranx.tx[l].amount;
                     }
-                    uint256 returnValue = total.div(lenMax);
-                    asusuState[token] = State(Active, total, returnValue, 0, 0);
+                    asusuState[tokens[i + 1]] = State(Position.Active, total, total /lenMax, 0, 0);
 
+                } else {
+                    tokenAsusu[tokens[i + 1]] = tranx;
                 }
-                Transfer(token, address(this), _value);
+                emit SentTokens(token, msg.sender, _value);
                 return true;
             }
             i++;
 
         }
-        if(asusuState[ethUSD].position == Active) {
-            return false;
-        }
-        priceFeed = AggregatorInterface(tokens[0]);
-        (price, time) = getLatestPriceaAndTimestamp(priceFeed);
-
-        uint256 rate = price.div(USDREFMultiply);
-        uint256 _value = twoHUSD.div(rate);
-
-        require(_value <= msg.sender.balanceOf(), "You have insufficient amount for this transaction");
-
-        msg.sender.transfer(address(this), _value);
-        uint indx = asusuState[ethUSD].gindex;
-        tokenAsusu[ethUSD][indx] = userDetail(now, time, _value, msg.sender);
-        asusuState[ethUSD].index = asusuState[ethUSD].index + 1;
-        if( asusuState[ethUSD].index == lenMax) {
-            uint256  total = 0;
-            uint i = 0;
-            while(i < lenMax) {
-                total = total + tokenAsusu[ethUSD][i].amount;
-            }
-            uint256 returnValue = total.div(lenMax);
-            asusuState[ethUSD] = State(Active, total, returnValue, 0);
-
-        }
-        Transfer(ethUSD, address(this), _value);
-        return true;
     }
 
     function distributeTokens(address _token) public onlyOwner {
-        uint i = 0;
-        while(i < lenMax){
-            if(asusuState[tokens[i]].position == Active && i == 0) {
-                address recipient = tokenAsusu[tokens[i]][asusuState[tokens[i]].tindex].user;
-                asusuState[tokens[i]].tindex = asusuState[tokens[i]].tindex + 1;
-                require(
-                    address(this).transfer(recipient, asusuState[tokens[i]].amountGivingPerMonth),
-                    "Token transfer could not be executed.");
-                emit DistributedTokens(ethUSD, recipient, asusuState[tokens[i]].amountGivingPerMonth);
-            } else {
-                ERC20 erc20token = ERC20(_tokens);
-                address recipient = tokenAsusu[tokens[i]][asusuState[tokens[i]].tindex].user;
-                asusuState[tokens[i]].tindex = asusuState[tokens[i]].tindex + 1;
-                require(
-                    erc20token.transfer(recipient, asusuState[tokens[i]].amountGivingPerMonth),
-                    "Token transfer could not be executed.");
-                emit DistributedTokens(_token, recipient, asusuState[tokens[i]].amountGivingPerMonth);
+        uint k = 0;
+        address recipient;
+        while(k < lenMax){
+            if(asusuState[tokens[k]].position == Position.Active) {
+                if(now >= tokenAsusu[tokens[k]].tx[asusuState[tokens[k]].tindex].time + (25 * 1 days)) {
+                    ERC20 erc20token = ERC20(_token);
+                    recipient = tokenAsusu[tokens[k]].tx[asusuState[tokens[k]].tindex].user;
+                    asusuState[tokens[k]].tindex = asusuState[tokens[k]].tindex + 1;
+                    require(
+                        erc20token.transfer(recipient, asusuState[tokens[k]].amountGivingPerMonth),
+                        "Token transfer could not be executed.");
+                    emit DistributedTokens(_token, recipient, asusuState[tokens[k]].amountGivingPerMonth);
+                }
             }
-            i++;
+            k++;
         }
+        if(k == lenMax) {
+            asusuState[tokens[k]].position == Position.Open;
+        }
+    }
+
+
+    function getChainlinkToken() public view returns (address) {
+        return chainlinkTokenAddress();
     }
 
     //function () public payable {}

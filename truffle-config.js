@@ -14,12 +14,15 @@ module.exports = {
       network_id: '*',
       // Necessary due to https://github.com/trufflesuite/truffle/issues/1971
       // Should be fixed in Truffle 5.0.17
+
+      //from: 0xe8f9957630AF8d1992FcE8369c4EB7BBD17150A5,
       skipDryRun: true,
     },
   },
   compilers: {
     solc: {
-      version: '0.4.24',
+      version: '0.5.0',
     },
   },
 }
+//0.4.24 version: '0.5.0'
